@@ -29,6 +29,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Liquid Glass needs the iOS 26 SDK, and the image's default Xcode is older.
+      - name: Select Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XCODE" ]; then sudo xcode-select -s "$XCODE"; fi
+
       - name: Toolchain
         run: xcodebuild -version && swift --version
 
@@ -91,6 +97,10 @@ jobs:
           for theme in dark crt-green crt-amber light; do shoot "$theme" -theme "$theme"; done
           shoot approval -demoApproval
           shoot settings -demoSettings
+          shoot context -demoContext
+          shoot cowork -demoCowork
+          shoot cowork-task -demoCoworkTask
+          shoot cowork-light -demoCoworkTask -theme light
 
       - uses: actions/upload-artifact@v4
         if: always()

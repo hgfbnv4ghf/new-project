@@ -8,6 +8,9 @@ public enum AgentEvent: Sendable {
     case toolOutput(id: String, chunk: String)
     case toolFinished(id: String, result: ToolResult, denied: Bool)
     case usage(input: Int, output: Int)
+    /// Old tool output was cut down to stay inside the context budget. `messages` is the history as it
+    /// now stands, without the system prompt, and replaces the caller's copy.
+    case trimmed(messages: [ChatMessage], savedTokens: Int)
 }
 
 public enum ApprovalDecision: Sendable {
@@ -29,11 +32,15 @@ public struct Agent: Sendable {
     public var client: ChatStreaming
     public var tools: ToolRunning
     public var maxSteps: Int
+    /// Estimated request size, in tokens, above which old tool output is trimmed before the next model
+    /// call. A long run resends everything it has read on every step, so this is where most tokens go.
+    public var trimAbove: Int?
 
-    public init(client: ChatStreaming, tools: ToolRunning, maxSteps: Int = 40) {
+    public init(client: ChatStreaming, tools: ToolRunning, maxSteps: Int = 40, trimAbove: Int? = nil) {
         self.client = client
         self.tools = tools
         self.maxSteps = maxSteps
+        self.trimAbove = trimAbove
     }
 
     /// `request.messages` is the history including the new user message. Every message produced is
@@ -48,6 +55,13 @@ public struct Agent: Sendable {
         request.tools = tools.specs
 
         for _ in 0..<maxSteps {
+            if let trimAbove, Tokens.estimate(request.messages) + Tokens.estimate(request.tools) > trimAbove {
+                let saved = Compaction.trimToolResults(in: &request.messages)
+                if saved > 0 {
+                    await emit(.trimmed(messages: request.messages.filter { $0.role != .system }, savedTokens: saved))
+                }
+            }
+
             var text = ""
             var calls: [Int: ToolCall] = [:]
 
@@ -134,5 +148,24 @@ public enum SystemPrompt {
         let trimmed = custom.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { lines.append(trimmed) }
         return lines.joined(separator: "\n")
+    }
+
+    /// The Cowork chat: no terminal and no SSH, just the files in the folder the user picked.
+    public static func cowork(custom: String, folder: String) -> String {
+        var lines = [
+            "You are Cowork, an assistant that works with the user on the files in a folder on their iPhone. The folder is \"\(folder)\" and it is your workspace: every path you use is relative to it.",
+            "Look before you act: list or search the folder and read what matters, then carry the task out with the file tools. Change a file with edit_file rather than rewriting all of it.",
+            "The user approves each change before it happens, so take purposeful steps, and never delete or overwrite anything they did not ask you to.",
+            "When the task is done, say briefly what you did and which files changed. Keep replies short: the screen is a phone.",
+        ]
+        let trimmed = custom.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { lines.append(trimmed) }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Adds the summary a compaction left behind, so the model still knows what came before the messages it is sent.
+    public static func withSummary(_ prompt: String, summary: String?) -> String {
+        guard let summary, !summary.isEmpty else { return prompt }
+        return prompt + "\n\nEarlier parts of this conversation were compacted to save tokens. What happened so far:\n" + summary
     }
 }

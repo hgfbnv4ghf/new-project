@@ -47,7 +47,7 @@ struct SettingsView: View {
                 } header: {
                     Text("SSH hosts")
                 } footer: {
-                    Text("The agent runs commands on the selected host. Switch with the ⇄ menu or /host.")
+                    Text("The terminal agent runs commands on the selected host. Switch with the ⇄ menu or /host.")
                 }
 
                 Section("Agent") {
@@ -64,6 +64,14 @@ struct SettingsView: View {
                     }
                 }
 
+                Section {
+                    ContextSettings()
+                } header: {
+                    Text("Context")
+                } footer: {
+                    Text("Near the limit, old tool output is trimmed and the chat is summarised, so each request costs fewer tokens. /context shows what fills it and /compact compresses it now.")
+                }
+
                 Section("Appearance") {
                     Picker("Theme", selection: binding(\.themeID)) {
                         ForEach(Theme.all) { theme in
@@ -76,7 +84,7 @@ struct SettingsView: View {
                 Section {
                     EmptyView()
                 } footer: {
-                    Text("Files the agent writes are in Files › On My iPhone › TermAI.")
+                    Text("Files the terminal agent writes are in Files › On My iPhone › TermAI. Cowork works in the folder you choose for it.")
                 }
             }
             .navigationTitle("Settings")

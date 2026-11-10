@@ -1,0 +1,100 @@
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Core tests (Linux)
+        run: swift --version && swift test --package-path TermKit
+
+  ipa:
+    # Intel image: the arm64 macOS pool was leaving jobs queued until they timed out.
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    env:
+      BUNDLE_ID: io.github.hgfh34bnvcn.termai
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: xcodebuild -version && swift --version
+
+      - name: Core tests
+        run: swift test --package-path TermKit
+
+      - name: Generate Xcode project
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          xcodegen generate
+
+      - name: Build unsigned IPA
+        run: |
+          xcodebuild build -quiet \
+            -project TermAI.xcodeproj -scheme TermAI -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build/device \
+            CODE_SIGNING_ALLOWED=NO
+          mkdir -p out/Payload
+          cp -R build/device/Build/Products/Release-iphoneos/TermAI.app out/Payload/
+          (cd out && zip -qry TermAI-unsigned.ipa Payload && rm -rf Payload)
+          ls -lh out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TermAI-unsigned-ipa
+          path: out/TermAI-unsigned.ipa
+          if-no-files-found: error
+
+      # Launches the app in demo mode on a simulator so the UI can be reviewed without a device.
+      - name: Simulator screenshots
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          runtimes = json.load(sys.stdin)['devices']
+          print(next(d['udid'] for key in sorted(runtimes, reverse=True) if 'iOS' in key
+                     for d in runtimes[key] if d['name'].startswith('iPhone')))")
+          xcodebuild build -quiet \
+            -project TermAI.xcodeproj -scheme TermAI -configuration Debug \
+            -sdk iphonesimulator -destination "id=$UDID" \
+            -derivedDataPath build/sim \
+            CODE_SIGNING_ALLOWED=NO
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" build/sim/Build/Products/Debug-iphonesimulator/TermAI.app
+          mkdir -p shots
+          shoot() {
+            name=$1; shift
+            xcrun simctl launch "$UDID" "$BUNDLE_ID" -demo "$@"
+            sleep 15
+            xcrun simctl io "$UDID" screenshot "shots/$name.png"
+            xcrun simctl terminate "$UDID" "$BUNDLE_ID"
+            sleep 3
+          }
+          # The first launch on a fresh simulator is slow; warm it up so no shot catches the launch screen.
+          xcrun simctl launch "$UDID" "$BUNDLE_ID" -demo
+          sleep 45
+          xcrun simctl terminate "$UDID" "$BUNDLE_ID"
+          sleep 3
+          for theme in dark crt-green crt-amber light; do shoot "$theme" -theme "$theme"; done
+          shoot approval -demoApproval
+          shoot settings -demoSettings
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: shots
+          if-no-files-found: warn

@@ -92,14 +92,19 @@ jobs:
             name=$1; shift
             xcrun simctl launch "$UDID" "$BUNDLE_ID" -demo "$@"
             # Launches are slow and uneven on the runner. Wait for the launch screen (a nearly empty
-            # image) to go, then give sheets and animations time to settle.
-            for _ in $(seq 30); do
-              sleep 3
-              xcrun simctl io "$UDID" screenshot "shots/$name.png" >/dev/null 2>&1 || true
+            # image) to go, then give sheets and animations time to settle. The first look can catch
+            # the home screen before the launch screen replaces it, so when the launch screen is what
+            # comes out after all, wait for the app again.
+            for attempt in 1 2 3; do
+              for look in $(seq 30); do
+                sleep 3
+                xcrun simctl io "$UDID" screenshot "shots/$name.png" >/dev/null 2>&1 || true
+                [ "$(stat -f %z "shots/$name.png")" -gt 150000 ] && break
+              done
+              sleep 8
+              xcrun simctl io "$UDID" screenshot "shots/$name.png"
               [ "$(stat -f %z "shots/$name.png")" -gt 150000 ] && break
             done
-            sleep 8
-            xcrun simctl io "$UDID" screenshot "shots/$name.png"
             xcrun simctl terminate "$UDID" "$BUNDLE_ID"
             sleep 3
           }

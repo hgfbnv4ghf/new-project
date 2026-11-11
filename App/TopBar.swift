@@ -70,9 +70,10 @@ private struct ModeSwitch: View {
             HStack(spacing: 5) {
                 Image(systemName: icon).font(.system(size: 12, weight: .semibold))
                 Text(title).font(.system(size: 13, weight: .semibold))
-                // A run keeps going in the chat that is not on screen; the dot says so.
+                // A run keeps going in the chat that is not on screen. The dot says so, in red when it is
+                // waiting for an answer.
                 if chat.isRunning, !selected {
-                    Circle().fill(palette.accent).frame(width: 6, height: 6)
+                    Circle().fill(chat.pendingApproval == nil ? palette.accent : palette.error).frame(width: 6, height: 6)
                 }
             }
             .foregroundStyle(selected ? palette.background : palette.text)

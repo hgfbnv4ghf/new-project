@@ -472,7 +472,8 @@ final class AppModel {
         if value == "auto" || value == "off" {
             update { $0.autoCompact = value == "auto" }
         } else if let limit = Tokens.parse(value) {
-            guard limit >= 1_000 else { return fail("the limit is counted in tokens, e.g. /context 32k") }
+            // The system prompt and tool definitions alone come to about a thousand tokens.
+            guard limit >= 4_000 else { return fail("the limit is counted in tokens and starts at 4k, e.g. /context 32k") }
             update { $0.contextLimit = limit }
         } else if !value.isEmpty {
             return fail("usage: /context [n|auto|off], e.g. /context 32k")

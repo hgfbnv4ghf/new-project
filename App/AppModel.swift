@@ -506,10 +506,13 @@ final class AppModel {
     }
 
     private func noteFolder() {
-        // A chat that has not started yet shows the folder on its opening screen instead.
-        guard !cowork.session.transcript.isEmpty else { return }
-        cowork.info("folder: \(coworkFolderName)")
-        cowork.scrollTick += 1
+        // A Cowork chat that has not started yet shows the folder on its opening screen instead.
+        if !cowork.session.transcript.isEmpty {
+            cowork.info("folder: \(coworkFolderName)")
+            cowork.scrollTick += 1
+        }
+        // /folder also works from the terminal, which has nowhere else to show the answer.
+        if chat.kind == .terminal { chat.info("cowork folder: \(coworkFolderName)") }
     }
 
     private func releaseFolder() {
@@ -676,7 +679,6 @@ final class AppModel {
                 showFolderPicker = true
             } else if args.lowercased() == "reset" {
                 clearFolder()
-                if chat.kind != .cowork { chat.info("cowork folder: \(coworkFolderName)") }
             } else {
                 chat.fail("usage: /folder [reset]. the folder is picked in Files, not typed")
             }

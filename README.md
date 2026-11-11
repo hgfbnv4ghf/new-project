@@ -46,7 +46,7 @@ The terminal's key row above the keyboard has `esc`, `/`, `!`, history `↑ ↓`
 
 Tap the folder name (in the bar, on the start screen or under the message field) and the Files browser opens: choose any folder on the phone, in iCloud Drive or from another provider. There is no path to type. The choice is remembered across launches; until you make one, Cowork uses the app's own folder (Files › On My iPhone › TermAI).
 
-Inside the folder the agent can list, search, read, write, edit, move and delete. Each step shows as a row you can expand to see its output.
+Inside the folder the agent can list, search, read, write, edit, move and delete. Each step shows as a row you can expand to see its output. Overwriting and deleting are permanent (nothing goes to Recently Deleted), so keep approval on `ask` for folders you care about.
 
 ### Context and tokens
 

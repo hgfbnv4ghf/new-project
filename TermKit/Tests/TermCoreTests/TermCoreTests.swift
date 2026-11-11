@@ -425,6 +425,79 @@ final class TermCoreTests: XCTestCase {
                        "search \"milk\" in notes")
     }
 
+    func testMovingOrDeletingALinkLeavesWhatItPointsToAlone() async throws {
+        let tools = ToolBox(workspace: workspace, shell: nil)
+        let files = FileManager.default
+        func run(_ name: String, _ arguments: String) async -> ToolResult {
+            await tools.run(ToolCall(id: "1", name: name, arguments: arguments)) { _ in }
+        }
+        func summary(_ name: String, _ arguments: String) -> String {
+            tools.summary(ToolCall(id: "1", name: name, arguments: arguments))
+        }
+        func exists(_ path: String) -> Bool { files.fileExists(atPath: workspace.appendingPathComponent(path).path) }
+        // True for a link as well, whether or not it points anywhere.
+        func isThere(_ path: String) -> Bool { (try? files.attributesOfItem(atPath: workspace.appendingPathComponent(path).path)) != nil }
+
+        try files.createDirectory(at: workspace.appendingPathComponent("releases/v2"), withIntermediateDirectories: true)
+        try Data("app".utf8).write(to: workspace.appendingPathComponent("releases/v2/app.txt"))
+        let outside = files.temporaryDirectory.appendingPathComponent("outside-\(UUID().uuidString)")
+        try files.createDirectory(at: outside, withIntermediateDirectories: true)
+        defer { try? files.removeItem(at: outside) }
+        try Data("keep".utf8).write(to: outside.appendingPathComponent("keep.txt"))
+        try files.createSymbolicLink(at: workspace.appendingPathComponent("current"), withDestinationURL: workspace.appendingPathComponent("releases/v2"))
+        try files.createSymbolicLink(at: workspace.appendingPathComponent("elsewhere"), withDestinationURL: outside)
+
+        // The approval prompt says what a call would destroy.
+        XCTAssertEqual(summary("delete_file", #"{"path":"releases"}"#), "delete releases and everything in it")
+        XCTAssertEqual(summary("delete_file", #"{"path":"releases/v2/app.txt"}"#), "delete releases/v2/app.txt")
+        XCTAssertEqual(summary("delete_file", #"{"path":"current"}"#), "delete current")
+        XCTAssertEqual(summary("delete_file", #"{"path":"../x"}"#), "delete ../x")
+        XCTAssertEqual(summary("write_file", #"{"path":"releases/v2/app.txt","content":"new"}"#), "overwrite releases/v2/app.txt (3 bytes)")
+        XCTAssertEqual(summary("write_file", #"{"path":"releases/v3/app.txt","content":"new"}"#), "write releases/v3/app.txt (3 bytes)")
+        XCTAssertEqual(summary("write_file", #"{"path":"releases","content":"new"}"#), "write releases (3 bytes)")
+
+        // Moving a link moves the link.
+        let moved = await run("move_file", #"{"from":"current","to":"live"}"#)
+        XCTAssertEqual(moved, ToolResult(text: "moved current → live"))
+        XCTAssertFalse(isThere("current"))
+        XCTAssertTrue(exists("live/app.txt") && exists("releases/v2/app.txt"))
+
+        // Deleting a link deletes the link, wherever it points.
+        let unlinked = await run("delete_file", #"{"path":"live"}"#)
+        XCTAssertEqual(unlinked, ToolResult(text: "deleted live"))
+        XCTAssertFalse(isThere("live"))
+        XCTAssertTrue(exists("releases/v2/app.txt"))
+        let dropped = await run("delete_file", #"{"path":"elsewhere"}"#)
+        XCTAssertEqual(dropped, ToolResult(text: "deleted elsewhere"))
+        XCTAssertFalse(isThere("elsewhere"))
+        XCTAssertTrue(files.fileExists(atPath: outside.appendingPathComponent("keep.txt").path))
+
+        // A path that goes through a link out of the workspace is still refused.
+        try files.createSymbolicLink(at: workspace.appendingPathComponent("out"), withDestinationURL: outside)
+        let through = await run("delete_file", #"{"path":"out/keep.txt"}"#)
+        XCTAssertTrue(through.isError && through.text.contains("outside the workspace"), through.text)
+        XCTAssertTrue(files.fileExists(atPath: outside.appendingPathComponent("keep.txt").path))
+        let into = await run("move_file", #"{"from":"releases/v2/app.txt","to":"out/app.txt"}"#)
+        XCTAssertTrue(into.isError && into.text.contains("outside the workspace"), into.text)
+        XCTAssertTrue(exists("releases/v2/app.txt"))
+
+        // A link that points nowhere can be removed too.
+        try files.createSymbolicLink(atPath: workspace.appendingPathComponent("dangling").path, withDestinationPath: "nowhere")
+        let dangling = await run("delete_file", #"{"path":"dangling"}"#)
+        XCTAssertEqual(dangling, ToolResult(text: "deleted dangling"))
+        XCTAssertFalse(isThere("dangling"))
+
+        // A folder cannot be moved into itself, and the attempt leaves nothing behind.
+        let inside = await run("move_file", #"{"from":"releases","to":"releases/old/releases"}"#)
+        XCTAssertTrue(inside.isError && inside.text.contains("into itself"), inside.text)
+        XCTAssertFalse(exists("releases/old"))
+        let ontoRoot = await run("move_file", #"{"from":"releases","to":"."}"#)
+        XCTAssertTrue(ontoRoot.isError && ontoRoot.text.contains("workspace folder itself"), ontoRoot.text)
+        let up = await run("delete_file", #"{"path":"releases/.."}"#)
+        XCTAssertTrue(up.isError && up.text.contains("workspace folder itself"), up.text)
+        XCTAssertTrue(exists("releases/v2/app.txt"))
+    }
+
     // MARK: Context
 
     func testTokenEstimatesFormattingAndParsing() {

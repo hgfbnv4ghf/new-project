@@ -62,9 +62,9 @@ public struct ToolBox: ToolRunning {
                      parametersJSON: #"{"type":"object","properties":{"path":{"type":"string","description":"Directory relative to the workspace root; omit for the root"},"recursive":{"type":"boolean","description":"Include subdirectories"}}}"#),
             ToolSpec(name: "search_files", description: "Find the lines that contain a piece of text in the workspace's files, ignoring case.",
                      parametersJSON: #"{"type":"object","properties":{"query":{"type":"string"},"path":{"type":"string","description":"Directory to search; omit for the whole workspace"}},"required":["query"]}"#),
-            ToolSpec(name: "move_file", description: "Move or rename a file or folder inside the workspace.",
+            ToolSpec(name: "move_file", description: "Move or rename a file or folder inside the workspace. `to` is the complete new path, not a folder to drop it into. Nothing is overwritten.",
                      parametersJSON: #"{"type":"object","properties":{"from":{"type":"string"},"to":{"type":"string"}},"required":["from","to"]}"#),
-            ToolSpec(name: "delete_file", description: "Delete a file or folder from the workspace.",
+            ToolSpec(name: "delete_file", description: "Delete a file, or a folder with everything in it, from the workspace. This cannot be undone.",
                      parametersJSON: #"{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}"#),
             ToolSpec(name: "fetch_url", description: "Fetch a web page or API response over HTTP(S) and return its text.",
                      parametersJSON: #"{"type":"object","properties":{"url":{"type":"string"}},"required":["url"]}"#),
@@ -87,12 +87,17 @@ public struct ToolBox: ToolRunning {
         switch call.name {
         case "ssh_exec": return "ssh \(shell?.label ?? "?") $ \(call.string("command") ?? "")"
         case "read_file": return "read \(call.string("path") ?? "")"
-        case "write_file": return "write \(call.string("path") ?? "") (\((call.string("content") ?? "").utf8.count) bytes)"
+        case "write_file":
+            // Say so when the write replaces a file: whoever approves it cannot see what is there now.
+            let path = call.string("path") ?? ""
+            return "\(isFile(path) ? "overwrite" : "write") \(path) (\((call.string("content") ?? "").utf8.count) bytes)"
         case "edit_file": return "edit \(call.string("path") ?? "")"
         case "list_files": return "ls \(call.bool("recursive") == true ? "-R " : "")\(call.string("path") ?? ".")"
         case "search_files": return "search \"\(call.string("query") ?? "")\"" + (call.string("path").map { " in \($0)" } ?? "")
         case "move_file": return "move \(call.string("from") ?? "") → \(call.string("to") ?? "")"
-        case "delete_file": return "delete \(call.string("path") ?? "")"
+        case "delete_file":
+            let path = call.string("path") ?? ""
+            return "delete \(path)" + (isFolder(path) ? " and everything in it" : "")
         case "fetch_url": return "fetch \(call.string("url") ?? "")"
         default: return call.name
         }
@@ -137,6 +142,35 @@ public struct ToolBox: ToolRunning {
             throw ToolError(message: "path is outside the workspace: \(path)")
         }
         return target
+    }
+
+    /// The path of something about to be moved or deleted. Unlike `resolve`, a symbolic link in the last
+    /// component is not followed, so the link is what gets moved or deleted, never what it points to.
+    /// Nil stands for the workspace folder itself.
+    func entry(_ path: String) throws -> URL? {
+        let names = path.trimmingCharacters(in: .whitespaces).split(separator: "/").filter { $0 != "." }
+        guard let name = names.last else { return nil }
+        guard name != ".." else {
+            // A path that ends by going up names a folder, not a link; `resolve` works out which.
+            let url = try resolve(path)
+            return url.path == (try resolve("")).path ? nil : url
+        }
+        return try resolve(names.dropLast().joined(separator: "/")).appendingPathComponent(String(name))
+    }
+
+    /// What is at `url`, without following a symbolic link; nil when nothing is there.
+    private func type(at url: URL) -> FileAttributeType? {
+        (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType
+    }
+
+    private func isFile(_ path: String) -> Bool {
+        guard let url = try? resolve(path) else { return false }
+        return type(at: url) == .typeRegular
+    }
+
+    private func isFolder(_ path: String) -> Bool {
+        guard let url = try? entry(path) else { return false }
+        return type(at: url) == .typeDirectory
     }
 
     private func require(_ call: ToolCall, _ key: String) throws -> String {
@@ -267,22 +301,20 @@ public struct ToolBox: ToolRunning {
     private func moveFile(_ call: ToolCall) throws -> ToolResult {
         let from = try require(call, "from")
         let to = try require(call, "to")
-        let source = try resolve(from)
-        let destination = try resolve(to)
-        let files = FileManager.default
-        guard source.path != (try resolve("")).path else { throw ToolError(message: "cannot move the workspace folder itself") }
-        guard files.fileExists(atPath: source.path) else { throw ToolError(message: "no such file: \(from)") }
-        guard !files.fileExists(atPath: destination.path) else { throw ToolError(message: "\(to) already exists") }
-        try files.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try files.moveItem(at: source, to: destination)
+        guard let source = try entry(from) else { throw ToolError(message: "cannot move the workspace folder itself") }
+        guard let destination = try entry(to) else { throw ToolError(message: "the destination is the workspace folder itself") }
+        guard type(at: source) != nil else { throw ToolError(message: "no such file: \(from)") }
+        guard type(at: destination) == nil else { throw ToolError(message: "\(to) already exists") }
+        guard !destination.path.hasPrefix(source.path + "/") else { throw ToolError(message: "cannot move \(from) into itself") }
+        try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: source, to: destination)
         return ToolResult(text: "moved \(from) → \(to)")
     }
 
     private func deleteFile(_ call: ToolCall) throws -> ToolResult {
         let path = try require(call, "path")
-        let url = try resolve(path)
-        guard url.path != (try resolve("")).path else { throw ToolError(message: "cannot delete the workspace folder itself") }
-        guard FileManager.default.fileExists(atPath: url.path) else { throw ToolError(message: "no such file: \(path)") }
+        guard let url = try entry(path) else { throw ToolError(message: "cannot delete the workspace folder itself") }
+        guard type(at: url) != nil else { throw ToolError(message: "no such file: \(path)") }
         try FileManager.default.removeItem(at: url)
         return ToolResult(text: "deleted \(path)")
     }

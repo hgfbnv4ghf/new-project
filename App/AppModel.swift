@@ -5,9 +5,19 @@ import TermCore
 import TermSSH
 import UIKit
 
-struct ShareItem: Identifiable {
-    let id = UUID()
-    let text: String
+/// What is presented over the chats. A single value, so two sheets can never be asked for at once.
+enum AppSheet: Identifiable {
+    case settings
+    case context
+    case share(String)
+
+    var id: String {
+        switch self {
+        case .settings: return "settings"
+        case .context: return "context"
+        case .share: return "share"
+        }
+    }
 }
 
 /// The `/setup` wizard: each step consumes one line of input.
@@ -44,10 +54,8 @@ final class AppModel {
     var hosts: [SSHHost] = []
     var settings = AppSettings()
     var setup: SetupStep?
-    var showSettings = false
-    var showContext = false
+    var sheet: AppSheet?
     var showFolderPicker = false
-    var shareItem: ShareItem?
     /// The folder Cowork works in once the user has picked one; nil means the app's own folder.
     var pickedFolder: URL?
 
@@ -624,7 +632,7 @@ final class AppModel {
             setup = .name
             chat.info("new API profile. esc cancels.\nprofile name (e.g. openrouter):")
         case "config":
-            showSettings = true
+            sheet = .settings
         case "model": modelCommand(args)
         case "profile": profileCommand(args)
         case "host": hostCommand(args)
@@ -687,7 +695,7 @@ final class AppModel {
             chat.info("copied \(last.text.count) characters")
         case "export":
             guard !chat.session.isEmpty else { return chat.fail("nothing to export yet") }
-            shareItem = ShareItem(text: Markdown.export(chat.session))
+            sheet = .share(Markdown.export(chat.session))
         case "clear":
             chat.session.transcript.removeAll()
         default:
@@ -924,9 +932,14 @@ final class AppModel {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         pickedFolder = folder
         if arguments.contains("-demoCoworkTask") { loadCoworkDemo() }
+        if arguments.contains("-demoContextReport") {
+            terminal.append(.user, "/context")
+            terminal.info(usage(of: terminal).report(reported: terminal.reportedInput, autoCompact: settings.autoCompact))
+        }
 
-        showSettings = arguments.contains("-demoSettings")
-        showContext = arguments.contains("-demoContext")
+        if arguments.contains("-demoSettings") { sheet = .settings }
+        if arguments.contains("-demoContext") { sheet = .context }
+        showFolderPicker = arguments.contains("-demoFolderPicker")
     }
 
     private func loadTerminalDemo(withApproval: Bool) {

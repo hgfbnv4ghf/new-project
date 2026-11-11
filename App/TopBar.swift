@@ -14,7 +14,7 @@ struct TopBar: View {
                     Spacer(minLength: 0)
                     ContextChip(palette: palette)
                     Button {
-                        model.showSettings = true
+                        model.sheet = .settings
                     } label: {
                         Image(systemName: "gearshape")
                             .font(.system(size: 15, weight: .medium))
@@ -96,7 +96,7 @@ private struct ContextChip: View {
     var body: some View {
         let usage = model.contextUsage
         Button {
-            model.showContext = true
+            model.sheet = .context
         } label: {
             HStack(spacing: 6) {
                 ContextRing(fraction: usage.fraction, color: palette.meter(usage.fraction), track: palette.dim.opacity(0.35))
@@ -162,7 +162,7 @@ private struct ModelMenu: View {
                     }
                 }
             }
-            Button("Settings…") { model.showSettings = true }
+            Button("Settings…") { model.sheet = .settings }
         } label: {
             HStack(spacing: 6) {
                 Text("●").foregroundStyle(model.chat.isRunning ? palette.accent : palette.success)
@@ -173,7 +173,9 @@ private struct ModelMenu: View {
 
     private var profileLabel: String {
         guard let profile = model.activeProfile else { return "no profile · /setup" }
-        return "\(profile.name) · \(model.activeModel ?? "no model")"
+        let name = model.activeModel ?? "no model"
+        // Cowork shares the row with a folder name, so the profile gives way to it.
+        return model.mode == .cowork ? name : "\(profile.name) · \(name)"
     }
 }
 

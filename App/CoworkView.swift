@@ -121,30 +121,33 @@ private struct CoworkTranscript: View {
 
     var body: some View {
         let chat = model.cowork
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(chat.session.transcript) { item in
-                        CoworkItem(item: item, palette: palette)
-                    }
-                    if chat.isRunning, chat.pendingApproval == nil {
-                        HStack(spacing: 8) {
-                            ProgressView().controlSize(.small).tint(palette.accent)
-                            Text("Working…").font(palette.caption).foregroundStyle(palette.dim)
+        GeometryReader { geometry in
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        ForEach(chat.session.transcript) { item in
+                            CoworkItem(item: item, palette: palette)
                         }
-                    } else if let usage = chat.usageLine {
-                        Text(usage).font(palette.small).foregroundStyle(palette.dim)
+                        if chat.isRunning, chat.pendingApproval == nil {
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.small).tint(palette.accent)
+                                Text("Working…").font(palette.caption).foregroundStyle(palette.dim)
+                            }
+                        } else if let usage = chat.usageLine {
+                            Text(usage).font(palette.small).foregroundStyle(palette.dim)
+                        }
+                        Color.clear.frame(height: 1).id("bottom")
                     }
-                    Color.clear.frame(height: 1).id("bottom")
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    // A short conversation starts under the bar rather than resting on the message field.
+                    .frame(maxWidth: .infinity, minHeight: geometry.size.height, alignment: .topLeading)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .defaultScrollAnchor(.bottom)
-            .scrollDismissesKeyboard(.interactively)
-            .onChange(of: chat.scrollTick) {
-                proxy.scrollTo("bottom", anchor: .bottom)
+                .defaultScrollAnchor(.bottom)
+                .scrollDismissesKeyboard(.interactively)
+                .onChange(of: chat.scrollTick) {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
             }
         }
     }

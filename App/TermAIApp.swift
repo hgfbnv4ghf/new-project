@@ -36,14 +36,12 @@ struct RootView: View {
         }
         .background(Backdrop(palette: palette))
         .preferredColorScheme(model.theme.isDark ? .dark : .light)
-        .sheet(isPresented: $model.showSettings) {
-            SettingsView()
-        }
-        .sheet(isPresented: $model.showContext) {
-            ContextView()
-        }
-        .sheet(item: $model.shareItem) { item in
-            ShareSheet(text: item.text)
+        .sheet(item: $model.sheet) { sheet in
+            switch sheet {
+            case .settings: SettingsView()
+            case .context: ContextView()
+            case .share(let text): ShareSheet(text: text)
+            }
         }
         // Folders are chosen in the Files browser, never typed as a path.
         .fileImporter(isPresented: $model.showFolderPicker, allowedContentTypes: [.folder]) { result in

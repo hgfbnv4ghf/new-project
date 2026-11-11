@@ -48,6 +48,8 @@ Tap the folder name (in the bar, on the start screen or under the message field)
 
 Inside the folder the agent can list, search, read, write, edit, move and delete. Each step shows as a row you can expand to see its output. Overwriting and deleting are permanent (nothing goes to Recently Deleted), so keep approval on `ask` for folders you care about. The prompt says when a step would overwrite a file or delete a whole folder, and the folder cannot be changed while a task is running.
 
+`/setup` typed in Cowork opens the settings screen instead of the step-by-step wizard, so an API key is only ever typed into a hidden field.
+
 ### Context and tokens
 
 Every request resends the whole conversation, so a long chat costs more with each message. Three things keep that down:
@@ -84,7 +86,7 @@ swift test --package-path TermKit      # unit tests (macOS or Linux)
 xcodegen generate && open TermAI.xcodeproj
 ```
 
-Liquid Glass needs Xcode 26 (the iOS 26 SDK). With an older Xcode the app still builds and uses the material fallback everywhere.
+Liquid Glass needs Xcode 26 (the iOS 26 SDK). With an older Xcode the glass calls are compiled out (`#if compiler(>=6.2)` in `App/Glass.swift`) and the material fallback is used everywhere. CI builds with Xcode 26 only, so that path is not built there.
 
 Two tests talk to real services and are skipped unless configured:
 

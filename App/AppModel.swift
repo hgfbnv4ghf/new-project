@@ -639,6 +639,9 @@ final class AppModel {
 
     private func runCommand(_ name: String, _ args: String) {
         let chat = self.chat
+        // The setup wizard needs the terminal's input line: a hidden field for the key, nothing
+        // autocorrected, esc to cancel. Cowork's field has none of that, so there /setup opens settings.
+        let name = name == "setup" && chat.kind == .cowork ? "config" : name
         let changesSession = ["new", "sessions", "retry", "clear", "setup", "compact"].contains(name)
         if chat.isRunning, changesSession, !(name == "sessions" && args.isEmpty) {
             return chat.info(busyNote(chat))

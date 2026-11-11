@@ -30,9 +30,10 @@ struct RootView: View {
                 TerminalView(inputFocused: $inputFocused)
             }
         }
-        // The bar floats over the chat, so the transcript scrolls underneath the glass.
+        // The bar floats over the chat; the shade keeps what scrolls under it from showing through the glass.
         .safeAreaInset(edge: .top, spacing: 0) {
             TopBar()
+                .background { BarShade(palette: palette, edge: .top) }
         }
         .background(Backdrop(palette: palette))
         .preferredColorScheme(model.theme.isDark ? .dark : .light)

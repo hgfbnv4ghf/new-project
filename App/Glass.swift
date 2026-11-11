@@ -50,16 +50,55 @@ struct GlassGroup<Content: View>: View {
     }
 }
 
-/// The theme's background with soft colour in the corners, which gives the glass something to bend.
+/// The theme's background with soft colour in two corners, which gives the glass something to bend.
 struct Backdrop: View {
     let palette: Palette
 
     var body: some View {
         ZStack {
             palette.background
-            RadialGradient(colors: [palette.accent.opacity(0.22), .clear], center: .topLeading, startRadius: 0, endRadius: 420)
-            RadialGradient(colors: [palette.success.opacity(0.12), .clear], center: .bottomTrailing, startRadius: 0, endRadius: 480)
+            Backdrop.glow(palette, at: .top)
+            Backdrop.glow(palette, at: .bottom)
         }
         .ignoresSafeArea()
+    }
+
+    /// The colour in the corner by an edge: the accent top left, the success colour bottom right.
+    static func glow(_ palette: Palette, at edge: VerticalEdge) -> RadialGradient {
+        edge == .top
+            ? RadialGradient(colors: [palette.accent.opacity(0.22), .clear], center: .topLeading, startRadius: 0, endRadius: 420)
+            : RadialGradient(colors: [palette.success.opacity(0.12), .clear], center: .bottomTrailing, startRadius: 0, endRadius: 480)
+    }
+}
+
+/// Goes behind a floating bar and hides what scrolls beneath it, so text never shows through the glass
+/// controls. It repeats the backdrop for that edge, so the bar still looks as if it floated on the
+/// backdrop itself, and it fades out just past the bar instead of ending in a line.
+struct BarShade: View {
+    let palette: Palette
+    let edge: VerticalEdge
+    /// The fade starts inside the bar's own padding and ends this far beyond its edge.
+    private let fade: CGFloat = 16
+    private let overhang: CGFloat = 10
+
+    var body: some View {
+        ZStack {
+            palette.background
+            Backdrop.glow(palette, at: edge)
+        }
+        .mask {
+            VStack(spacing: 0) {
+                if edge == .bottom {
+                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: fade)
+                }
+                Color.black
+                if edge == .top {
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: fade)
+                }
+            }
+        }
+        .padding(edge == .top ? .bottom : .top, -overhang)
+        .ignoresSafeArea(edges: edge == .top ? .top : .bottom)
+        .allowsHitTesting(false)
     }
 }

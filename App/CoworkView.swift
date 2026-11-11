@@ -328,6 +328,7 @@ private struct Composer: View {
             .padding(.top, 6)
             .padding(.bottom, 8)
         }
+        .background { BarShade(palette: palette, edge: .bottom) }
     }
 
     private func send() {

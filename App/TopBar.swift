@@ -4,46 +4,77 @@ import TermCore
 /// The bar both chats share: which chat is open, how full its context is, and what it is talking to.
 struct TopBar: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     var body: some View {
         let palette = model.palette
         GlassGroup(spacing: 4) {
-            VStack(spacing: 6) {
-                HStack(spacing: 8) {
-                    ModeSwitch(palette: palette)
-                    Spacer(minLength: 0)
-                    ContextChip(palette: palette)
-                    Button {
-                        model.sheet = .settings
-                    } label: {
-                        Image(systemName: "gearshape")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(palette.text)
-                            .frame(width: 36, height: 36)
-                            .glass(in: Circle(), interactive: true)
+            Group {
+                if verticalSizeClass == .compact {
+                    // A phone on its side has no height to spare: one row, so the transcript keeps its lines.
+                    HStack(spacing: 8) {
+                        ModeSwitch(palette: palette)
+                        StatusRow(palette: palette)
+                        ContextChip(palette: palette)
+                        SettingsButton(palette: palette)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Settings")
-                }
-
-                HStack(spacing: 10) {
-                    ModelMenu(palette: palette)
-                    Spacer(minLength: 4)
-                    if model.mode == .cowork {
-                        FolderButton(palette: palette)
-                    } else {
-                        HostMenu(palette: palette)
+                } else {
+                    VStack(spacing: 6) {
+                        HStack(spacing: 8) {
+                            ModeSwitch(palette: palette)
+                            Spacer(minLength: 0)
+                            ContextChip(palette: palette)
+                            SettingsButton(palette: palette)
+                        }
+                        StatusRow(palette: palette)
                     }
                 }
-                .font(palette.small)
-                .padding(.horizontal, 14)
-                .frame(height: 34)
-                .glass(in: Capsule())
             }
             .padding(.horizontal, 10)
             .padding(.top, 2)
             .padding(.bottom, 6)
         }
+    }
+}
+
+private struct SettingsButton: View {
+    @Environment(AppModel.self) private var model
+    let palette: Palette
+
+    var body: some View {
+        Button {
+            model.sheet = .settings
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(palette.text)
+                .frame(width: 36, height: 36)
+                .glass(in: Circle(), interactive: true)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Settings")
+    }
+}
+
+/// What the open chat talks to: the model, and the SSH host or the Cowork folder.
+private struct StatusRow: View {
+    @Environment(AppModel.self) private var model
+    let palette: Palette
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ModelMenu(palette: palette)
+            Spacer(minLength: 4)
+            if model.mode == .cowork {
+                FolderButton(palette: palette)
+            } else {
+                HostMenu(palette: palette)
+            }
+        }
+        .font(palette.small)
+        .padding(.horizontal, 14)
+        .frame(height: 34)
+        .glass(in: Capsule())
     }
 }
 
@@ -213,7 +244,7 @@ private struct FolderButton: View {
 
     var body: some View {
         Button {
-            model.showFolderPicker = true
+            model.chooseFolder()
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "folder.fill")
@@ -224,7 +255,7 @@ private struct FolderButton: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button("Choose folder…") { model.showFolderPicker = true }
+            Button("Choose folder…") { model.chooseFolder() }
             if model.pickedFolder != nil {
                 Button("Use the TermAI folder") { model.clearFolder() }
             }

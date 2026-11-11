@@ -1,5 +1,6 @@
 import SwiftUI
 import TermCore
+import UIKit
 import UniformTypeIdentifiers
 
 @main
@@ -48,6 +49,18 @@ struct RootView: View {
         .fileImporter(isPresented: $model.showFolderPicker, allowedContentTypes: [.folder]) { result in
             model.folderPicked(result)
         }
+        .task { await turnForDemo() }
+    }
+}
+
+/// Screenshot mode only: simctl cannot turn the device, so the app asks for landscape itself.
+@MainActor
+private func turnForDemo() async {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-demo"), arguments.contains("-demoLandscape") else { return }
+    try? await Task.sleep(nanoseconds: 1_500_000_000)
+    for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+        scene.requestGeometryUpdate(UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .landscapeRight))
     }
 }
 

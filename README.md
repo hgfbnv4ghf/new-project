@@ -46,7 +46,7 @@ The terminal's key row above the keyboard has `esc`, `/`, `!`, history `↑ ↓`
 
 Tap the folder name (in the bar, on the start screen or under the message field) and the Files browser opens: choose any folder on the phone, in iCloud Drive or from another provider. There is no path to type. The choice is remembered across launches; until you make one, Cowork uses the app's own folder (Files › On My iPhone › TermAI).
 
-Inside the folder the agent can list, search, read, write, edit, move and delete. Each step shows as a row you can expand to see its output. Overwriting and deleting are permanent (nothing goes to Recently Deleted), so keep approval on `ask` for folders you care about.
+Inside the folder the agent can list, search, read, write, edit, move and delete. Each step shows as a row you can expand to see its output. Overwriting and deleting are permanent (nothing goes to Recently Deleted), so keep approval on `ask` for folders you care about. The prompt says when a step would overwrite a file or delete a whole folder, and the folder cannot be changed while a task is running.
 
 ### Context and tokens
 
@@ -63,7 +63,7 @@ Token counts are estimates (about four bytes a token), since every model counts 
 - **Approval.** In the default `ask` mode every SSH command, file change and web request waits for your answer: `y` / `n` / `a` in the terminal, buttons in Cowork (`a` is always, for this session). Reading, listing and searching files does not ask.
 - **Secrets.** API keys, passwords and private keys are stored in the iOS Keychain (this device only). They are never written to the JSON settings files.
 - **Host keys.** The first connection to a host records its key (the fingerprint is printed); later connections are refused if the key changes.
-- **Workspace.** File tools are confined to one folder: the app's Documents folder for the terminal, the folder you picked for Cowork. Paths that leave it, directly or through a symlink, are refused.
+- **Workspace.** File tools are confined to one folder: the app's Documents folder for the terminal, the folder you picked for Cowork. Paths that leave it, directly or through a symlink, are refused. Moving or deleting a symlink acts on the link, not on what it points to.
 - **Network.** The app talks only to the endpoints and hosts you configure. Plain-`http` endpoints are allowed for LAN servers such as Ollama; the app warns when an API key would be sent over one.
 
 SSH private keys must be Ed25519 or RSA in OpenSSH format.

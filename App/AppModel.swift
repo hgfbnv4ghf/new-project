@@ -483,6 +483,21 @@ final class AppModel {
 
     // MARK: Cowork folder
 
+    /// Opens the Files browser to choose Cowork's folder.
+    func chooseFolder() {
+        guard folderCanChange() else { return }
+        showFolderPicker = true
+    }
+
+    /// A task works in the folder it started with, and its approval prompts name paths inside it, so
+    /// the folder stays put until the task is over.
+    private func folderCanChange() -> Bool {
+        guard cowork.isRunning else { return true }
+        chat.info("the folder cannot change while a cowork task is running. stop the task first")
+        chat.scrollTick += 1
+        return false
+    }
+
     /// The Files browser returned a folder.
     func folderPicked(_ result: Result<URL, Error>) {
         switch result {
@@ -494,12 +509,13 @@ final class AppModel {
             update { $0.coworkFolder = try? url.bookmarkData() }
             noteFolder()
         case .failure(let error):
-            cowork.fail("folder: \(error.localizedDescription)")
+            chat.fail("folder: \(error.localizedDescription)")
         }
     }
 
     /// Back to the app's own folder.
     func clearFolder() {
+        guard folderCanChange() else { return }
         releaseFolder()
         update { $0.coworkFolder = nil }
         noteFolder()
@@ -676,7 +692,7 @@ final class AppModel {
             switchMode(.terminal)
         case "folder":
             if args.isEmpty {
-                showFolderPicker = true
+                chooseFolder()
             } else if args.lowercased() == "reset" {
                 clearFolder()
             } else {

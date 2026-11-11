@@ -57,7 +57,7 @@ private struct CoworkStart: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 Button {
-                    model.showFolderPicker = true
+                    model.chooseFolder()
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "folder.fill").font(.system(size: 20)).foregroundStyle(palette.accent)
@@ -286,7 +286,7 @@ private struct Composer: View {
 
                     HStack(spacing: 8) {
                         Button {
-                            model.showFolderPicker = true
+                            model.chooseFolder()
                         } label: {
                             HStack(spacing: 5) {
                                 Image(systemName: "folder")

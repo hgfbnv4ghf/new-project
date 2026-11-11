@@ -114,6 +114,12 @@ jobs:
           shoot cowork-task -demoCoworkTask
           shoot cowork-light -demoCoworkTask -theme light
           shoot folder-picker -demoCowork -demoFolderPicker
+          # Last on this simulator, because the app turns its interface on its side. simctl captures
+          # the panel as it is mounted, so the shot is stood upright afterwards.
+          shoot landscape -demoLandscape
+          if [ "$(sips -g pixelHeight shots/landscape.png | awk '/pixelHeight/ {print $2}')" -gt "$(sips -g pixelWidth shots/landscape.png | awk '/pixelWidth/ {print $2}')" ]; then
+            sips -r 270 shots/landscape.png >/dev/null
+          fi
 
           # Before iOS 26 there is no Liquid Glass and App/Glass.swift falls back to a material. Show
           # that as well, on an iOS 18 simulator when the image has one.

@@ -15,7 +15,7 @@ Every push builds an unsigned IPA on GitHub Actions.
 2. Download the `TermAI-unsigned-ipa` artifact and unzip it.
 3. Sign and install `TermAI-unsigned.ipa` with your sideloading tool (AltStore, Sideloadly, TrollStore, or your own certificate).
 
-The same run uploads a `screenshots` artifact with the app in each theme and both chats.
+The same run uploads a `screenshots` artifact with the app in each theme and both chats, plus `fallback-*` shots from iOS 18, where the glass is a blurred material.
 
 ## Use
 

@@ -78,10 +78,16 @@ jobs:
             -sdk iphonesimulator -destination "id=$UDID" \
             -derivedDataPath build/sim \
             CODE_SIGNING_ALLOWED=NO
-          xcrun simctl boot "$UDID"
-          xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl install "$UDID" build/sim/Build/Products/Debug-iphonesimulator/TermAI.app
-          mkdir -p shots
+          start() {
+            xcrun simctl boot "$UDID"
+            xcrun simctl bootstatus "$UDID" -b
+            xcrun simctl install "$UDID" build/sim/Build/Products/Debug-iphonesimulator/TermAI.app
+            # The first launch on a fresh simulator is slow; warm it up so no shot catches the launch screen.
+            xcrun simctl launch "$UDID" "$BUNDLE_ID" -demo
+            sleep 45
+            xcrun simctl terminate "$UDID" "$BUNDLE_ID"
+            sleep 3
+          }
           shoot() {
             name=$1; shift
             xcrun simctl launch "$UDID" "$BUNDLE_ID" -demo "$@"
@@ -97,11 +103,8 @@ jobs:
             xcrun simctl terminate "$UDID" "$BUNDLE_ID"
             sleep 3
           }
-          # The first launch on a fresh simulator is slow; warm it up so no shot catches the launch screen.
-          xcrun simctl launch "$UDID" "$BUNDLE_ID" -demo
-          sleep 45
-          xcrun simctl terminate "$UDID" "$BUNDLE_ID"
-          sleep 3
+          mkdir -p shots
+          start
           for theme in dark crt-green crt-amber light; do shoot "$theme" -theme "$theme"; done
           shoot approval -demoApproval
           shoot settings -demoSettings
@@ -111,6 +114,24 @@ jobs:
           shoot cowork-task -demoCoworkTask
           shoot cowork-light -demoCoworkTask -theme light
           shoot folder-picker -demoCowork -demoFolderPicker
+
+          # Before iOS 26 there is no Liquid Glass and App/Glass.swift falls back to a material. Show
+          # that as well, on an iOS 18 simulator when the image has one.
+          OLD=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          runtimes = json.load(sys.stdin)['devices']
+          print(next((d['udid'] for key in sorted(runtimes) if 'iOS-18' in key
+                      for d in runtimes[key] if d['name'].startswith('iPhone')), ''))")
+          if [ -n "$OLD" ]; then
+            xcrun simctl shutdown "$UDID"
+            UDID=$OLD
+            start
+            shoot fallback-terminal
+            shoot fallback-approval -demoApproval
+            shoot fallback-cowork -demoCoworkTask -theme light
+          else
+            echo "::notice::No iOS 18 simulator on this image; the fallback screenshots were skipped."
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always()

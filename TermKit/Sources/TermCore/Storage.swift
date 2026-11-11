@@ -63,13 +63,14 @@ public final class Storage {
         try? FileManager.default.removeItem(at: sessionsDirectory.appendingPathComponent("\(id.uuidString).json"))
     }
 
-    /// Most recently updated first.
-    public func sessionSummaries() -> [SessionSummary] {
+    /// Most recently updated first; `kind` narrows the list to one of the two chats.
+    public func sessionSummaries(kind: SessionKind? = nil) -> [SessionSummary] {
         let files = (try? FileManager.default.contentsOfDirectory(at: sessionsDirectory, includingPropertiesForKeys: nil)) ?? []
         return files.compactMap { url -> SessionSummary? in
             guard url.pathExtension == "json", let data = try? Data(contentsOf: url),
-                  let session = try? decoder.decode(Session.self, from: data) else { return nil }
-            return SessionSummary(id: session.id, title: session.title, updatedAt: session.updatedAt)
+                  let session = try? decoder.decode(Session.self, from: data),
+                  kind == nil || session.kind == kind else { return nil }
+            return SessionSummary(id: session.id, kind: session.kind, title: session.title, updatedAt: session.updatedAt)
         }
         .sorted { $0.updatedAt > $1.updatedAt }
     }

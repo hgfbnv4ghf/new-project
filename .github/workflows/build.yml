@@ -23,11 +23,18 @@ jobs:
   ipa:
     # Intel image: the arm64 macOS pool was leaving jobs queued until they timed out.
     runs-on: macos-15-intel
-    timeout-minutes: 45
+    # The iOS 26 simulator takes its time on this image: about 35 minutes for the whole job.
+    timeout-minutes: 60
     env:
       BUNDLE_ID: io.github.hgfh34bnvcn.termai
     steps:
       - uses: actions/checkout@v4
+
+      # Liquid Glass needs the iOS 26 SDK, and the image's default Xcode is older.
+      - name: Select Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XCODE" ]; then sudo xcode-select -s "$XCODE"; fi
 
       - name: Toolchain
         run: xcodebuild -version && swift --version
@@ -71,26 +78,71 @@ jobs:
             -sdk iphonesimulator -destination "id=$UDID" \
             -derivedDataPath build/sim \
             CODE_SIGNING_ALLOWED=NO
-          xcrun simctl boot "$UDID"
-          xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl install "$UDID" build/sim/Build/Products/Debug-iphonesimulator/TermAI.app
-          mkdir -p shots
-          shoot() {
-            name=$1; shift
-            xcrun simctl launch "$UDID" "$BUNDLE_ID" -demo "$@"
-            sleep 15
-            xcrun simctl io "$UDID" screenshot "shots/$name.png"
+          start() {
+            xcrun simctl boot "$UDID"
+            xcrun simctl bootstatus "$UDID" -b
+            xcrun simctl install "$UDID" build/sim/Build/Products/Debug-iphonesimulator/TermAI.app
+            # The first launch on a fresh simulator is slow; warm it up so no shot catches the launch screen.
+            xcrun simctl launch "$UDID" "$BUNDLE_ID" -demo
+            sleep 45
             xcrun simctl terminate "$UDID" "$BUNDLE_ID"
             sleep 3
           }
-          # The first launch on a fresh simulator is slow; warm it up so no shot catches the launch screen.
-          xcrun simctl launch "$UDID" "$BUNDLE_ID" -demo
-          sleep 45
-          xcrun simctl terminate "$UDID" "$BUNDLE_ID"
-          sleep 3
+          shoot() {
+            name=$1; shift
+            xcrun simctl launch "$UDID" "$BUNDLE_ID" -demo "$@"
+            # Launches are slow and uneven on the runner. Wait for the launch screen (a nearly empty
+            # image) to go, then give sheets and animations time to settle. The first look can catch
+            # the home screen before the launch screen replaces it, so when the launch screen is what
+            # comes out after all, wait for the app again.
+            for attempt in 1 2 3; do
+              for look in $(seq 30); do
+                sleep 3
+                xcrun simctl io "$UDID" screenshot "shots/$name.png" >/dev/null 2>&1 || true
+                [ "$(stat -f %z "shots/$name.png")" -gt 150000 ] && break
+              done
+              sleep 8
+              xcrun simctl io "$UDID" screenshot "shots/$name.png"
+              [ "$(stat -f %z "shots/$name.png")" -gt 150000 ] && break
+            done
+            xcrun simctl terminate "$UDID" "$BUNDLE_ID"
+            sleep 3
+          }
+          mkdir -p shots
+          start
           for theme in dark crt-green crt-amber light; do shoot "$theme" -theme "$theme"; done
           shoot approval -demoApproval
           shoot settings -demoSettings
+          shoot context -demoContext
+          shoot context-report -demoContextReport
+          shoot cowork -demoCowork
+          shoot cowork-task -demoCoworkTask
+          shoot cowork-light -demoCoworkTask -theme light
+          shoot folder-picker -demoCowork -demoFolderPicker
+          # Last on this simulator, because the app turns its interface on its side. simctl captures
+          # the panel as it is mounted, so the shot is stood upright afterwards.
+          shoot landscape -demoLandscape
+          if [ "$(sips -g pixelHeight shots/landscape.png | awk '/pixelHeight/ {print $2}')" -gt "$(sips -g pixelWidth shots/landscape.png | awk '/pixelWidth/ {print $2}')" ]; then
+            sips -r 270 shots/landscape.png >/dev/null
+          fi
+
+          # Before iOS 26 there is no Liquid Glass and App/Glass.swift falls back to a material. Show
+          # that as well, on an iOS 18 simulator when the image has one.
+          OLD=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          runtimes = json.load(sys.stdin)['devices']
+          print(next((d['udid'] for key in sorted(runtimes) if 'iOS-18' in key
+                      for d in runtimes[key] if d['name'].startswith('iPhone')), ''))")
+          if [ -n "$OLD" ]; then
+            xcrun simctl shutdown "$UDID"
+            UDID=$OLD
+            start
+            shoot fallback-terminal
+            shoot fallback-approval -demoApproval
+            shoot fallback-cowork -demoCoworkTask -theme light
+          else
+            echo "::notice::No iOS 18 simulator on this image; the fallback screenshots were skipped."
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always()

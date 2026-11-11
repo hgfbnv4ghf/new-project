@@ -1,5 +1,7 @@
 import SwiftUI
 import TermCore
+import UIKit
+import UniformTypeIdentifiers
 
 @main
 struct TermAIApp: App {
@@ -7,9 +9,58 @@ struct TermAIApp: App {
 
     var body: some Scene {
         WindowGroup {
-            TerminalView()
+            RootView()
                 .environment(model)
         }
+    }
+}
+
+/// One window for both chats: the shared bar on top, then whichever chat is open with its own input.
+struct RootView: View {
+    @Environment(AppModel.self) private var model
+    @FocusState private var inputFocused: Bool
+
+    var body: some View {
+        @Bindable var model = model
+        let palette = model.palette
+
+        ZStack {
+            if model.mode == .cowork {
+                CoworkView(inputFocused: $inputFocused)
+            } else {
+                TerminalView(inputFocused: $inputFocused)
+            }
+        }
+        // The bar floats over the chat; the shade keeps what scrolls under it from showing through the glass.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            TopBar()
+                .background { BarShade(palette: palette, edge: .top) }
+        }
+        .background(Backdrop(palette: palette))
+        .preferredColorScheme(model.theme.isDark ? .dark : .light)
+        .sheet(item: $model.sheet) { sheet in
+            switch sheet {
+            case .settings: SettingsView()
+            case .context: ContextView()
+            case .share(let text): ShareSheet(text: text)
+            }
+        }
+        // Folders are chosen in the Files browser, never typed as a path.
+        .fileImporter(isPresented: $model.showFolderPicker, allowedContentTypes: [.folder]) { result in
+            model.folderPicked(result)
+        }
+        .task { await turnForDemo() }
+    }
+}
+
+/// Screenshot mode only: simctl cannot turn the device, so the app asks for landscape itself.
+@MainActor
+private func turnForDemo() async {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-demo"), arguments.contains("-demoLandscape") else { return }
+    try? await Task.sleep(nanoseconds: 1_500_000_000)
+    for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+        scene.requestGeometryUpdate(UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .landscapeRight))
     }
 }
 
@@ -38,4 +89,9 @@ struct Palette {
     var font: Font { .system(size: fontSize, design: .monospaced) }
     var small: Font { .system(size: max(fontSize - 2, 9), design: .monospaced) }
     var bold: Font { .system(size: fontSize, weight: .semibold, design: .monospaced) }
+
+    // Cowork reads as a conversation rather than a terminal, so it is set in the proportional face.
+    var body: Font { .system(size: fontSize + 3) }
+    var caption: Font { .system(size: fontSize) }
+    var title: Font { .system(size: fontSize + 15, weight: .bold, design: .rounded) }
 }

@@ -14,6 +14,15 @@ public struct APIError: LocalizedError, Equatable {
 
     public var errorDescription: String? { "HTTP \(status): \(message)" }
 
+    /// Whether the endpoint turned the request down for being longer than the model's context window.
+    /// Providers word it differently, but nearly all of them use one of these phrases.
+    public var isContextOverflow: Bool {
+        guard [400, 413, 422].contains(status) else { return false }
+        let text = message.lowercased()
+        return ["context length", "context window", "context size", "context_length", "maximum context",
+                "too many tokens", "prompt is too long", "reduce the length"].contains { text.contains($0) }
+    }
+
     /// Pulls `error.message` out of an OpenAI-style error body, falling back to the raw text.
     static func from(status: Int, body: Data) -> APIError {
         if let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
